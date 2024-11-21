@@ -9,20 +9,36 @@ import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
 //import { GridLayer } from "npm:@types/leaflet@^1.9.14";
 
+// Set up types/interfaces
 type GridPoint = {
   i: number;
   j: number;
 };
+interface Coin {
+  cell: GridPoint;
+  serial: string;
+}
 interface Cache {
-  coins: number;
+  coins: Coin[];
 }
 const allCaches: Map<GridPoint, Cache> = new Map();
 
+// Set up Event Bus to handle dispatched Events
+const bus = new EventTarget();
+/* Possible Event Names:
+player_moved
+inventory_changed
+*/
+function notifyBus(eventName: string) {
+  bus.dispatchEvent(new Event(eventName));
+}
+bus.addEventListener("inventory_changed", updateInventory);
+
 const title = document.getElementById("title")!;
-title.innerText = "Hello";
+title.innerText = "NFT Colletion";
 
 // Tunable gameplay parameters
-const SPAWN_POINT = leaflet.latLng(36.98949379578401, -122.06277128548504);
+const SPAWN_POINT = leaflet.latLng(0, 0);
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
@@ -52,24 +68,41 @@ playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
 // Set up NFT coins
-let collectedCoins = 0;
-const NFTPanel = document.getElementById("NFTPanel")!; // element `NFTPanel` is defined in index.html
-NFTPanel.innerHTML = "No coins";
+const collectedCoins: Coin[] = [];
+const inventory = document.getElementById("inventory")!; // element `inventory` is defined in index.html
+inventory.innerHTML = "No coins";
+
+function updateInventory() {
+  inventory.innerHTML = "";
+  const ul = document.createElement("ul"); // start the unordered list of NFTs
+  collectedCoins.forEach((coin: Coin) => { // coins have a cell and serial
+    const li = document.createElement("li");
+    li.textContent = `${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
+    ul.appendChild(li);
+  });
+  inventory.append(ul);
+}
 
 // Set up collection and depositing of coins
-// this function assumes the cell has a cache in it because it is only called when a cache is collected from
+// collection/depositing of coins will be randomized to add a twist to the nature of the game
 function collect(cell: GridPoint) {
   const collectCache = allCaches.get(cell);
-  if (collectCache && collectCache.coins > 0) {
-    collectCache.coins -= 1;
-    collectedCoins += 1;
+  if (collectCache && collectCache.coins.length > 0) {
+    const whichCoin: number = Math.floor(
+      Math.random() * collectCache.coins.length,
+    );
+    const coin: Coin = collectCache.coins.splice(whichCoin, 1).pop()!;
+    collectedCoins.push(coin);
+    notifyBus("inventory_changed");
   }
 }
 function deposit(cell: GridPoint) {
   const depositCache = allCaches.get(cell);
-  if (depositCache && collectedCoins > 0) {
-    depositCache.coins += 1;
-    collectedCoins -= 1;
+  if (depositCache && collectedCoins.length > 0) {
+    const whichCoin: number = Math.floor(Math.random() * collectedCoins.length);
+    const coin: Coin = collectedCoins.splice(whichCoin, 1).pop()!;
+    depositCache.coins.push(coin);
+    notifyBus("inventory_changed");
   }
 }
 
@@ -91,17 +124,26 @@ function spawnCache(point: GridPoint) {
   rect.addTo(map);
 
   const cache: Cache = {
-    coins: Math.floor(
-      luck([point.i, point.j, "initialValue"].toString()) * 100,
-    ),
+    coins: [],
   };
+  // Populate the cache
+  for (
+    let i = 0;
+    i < Math.floor(luck([point.i, point.j, "initialValue"].toString()) * 8);
+    i++
+  ) {
+    cache.coins.push({
+      cell: point,
+      serial: i.toString(),
+    });
+  }
   allCaches.set(point, cache);
   // Handle interactions with the cache
   rect.bindPopup(() => {
     // The popup offers a description and button
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-                <div>There is a cache here at "${point.i},${point.j}". It has value <span id="value">${cache.coins}</span>.</div>
+                <div>Cache "${point.i}:${point.j}". It has <span id="value">${cache.coins.length}</span> coins.</div>
                 <button id="collect">collect</button>
                 <button id="deposit">deposit</button>`;
 
@@ -111,16 +153,14 @@ function spawnCache(point: GridPoint) {
       .addEventListener("click", () => {
         collect(point);
         popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache
-          .coins.toString();
-        NFTPanel.innerHTML = `${collectedCoins} coins accumulated`;
+          .coins.length.toString();
       });
     popupDiv
       .querySelector<HTMLButtonElement>("#deposit")!
       .addEventListener("click", () => {
         deposit(point);
         popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache
-          .coins.toString();
-        NFTPanel.innerHTML = `${collectedCoins} coins accumulated`;
+          .coins.length.toString();
       });
 
     return popupDiv;
