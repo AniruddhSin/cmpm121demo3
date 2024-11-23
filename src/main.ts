@@ -1,5 +1,5 @@
 import "./style.css";
-import leaflet from "leaflet";
+import leaflet, { Polyline } from "leaflet";
 // CSS Files
 import "leaflet/dist/leaflet.css";
 import "./style.css";
@@ -7,7 +7,6 @@ import "./style.css";
 import "./leafletWorkaround.ts";
 // Deterministic random number generator
 import luck from "./luck.ts";
-//import { GridLayer } from "npm:@types/leaflet@^1.9.14";
 
 // Set up types/interfaces
 type GridPoint = {
@@ -41,10 +40,9 @@ title.innerText = "NFT Colletion";
 
 // Tunable gameplay parameters
 const SPAWN_POINT = leaflet.latLng(36.98949379578401, -122.06277128548504);
-//const SPAWN_POINT = leaflet.latLng(0,0);
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 5;
+const NEIGHBORHOOD_SIZE = 8;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
 // Create the map (element with id "map" is defined in index.html)
@@ -70,7 +68,10 @@ const playerLocation = SPAWN_POINT;
 const playerMarker = leaflet.marker(playerLocation);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
-// use curr lat/lng to get grid location
+
+// Set up movement history
+const movementHistory: Polyline = leaflet.polyline([]).addTo(map);
+movementHistory.addLatLng(leaflet.latLng(SPAWN_POINT.lat, SPAWN_POINT.lng));
 
 // Set up rectangle group to help redrawing
 const rectGroup = leaflet.layerGroup().addTo(map);
@@ -213,6 +214,7 @@ function movePlayer(lat: number, lng: number) {
   playerLocation.lat = newLat;
   playerLocation.lng = newLng;
   playerMarker.setLatLng(playerLocation);
+  movementHistory.addLatLng(leaflet.latLng(newLat, newLng));
   map.panTo(playerLocation);
   updateLocation();
 }
@@ -231,6 +233,16 @@ southButton!.addEventListener("click", () => {
 const westButton = document.getElementById("west");
 westButton!.addEventListener("click", () => {
   movePlayer(0, -1);
+});
+
+// Additional buttons
+const sensorButton = document.getElementById("sensor");
+sensorButton!.addEventListener("click", () => {
+  navigator.geolocation.getCurrentPosition((position) => {
+    playerLocation.lat = position.coords.latitude;
+    playerLocation.lng = position.coords.longitude;
+    movePlayer(0, 0);
+  });
 });
 
 function updateLocation() {
