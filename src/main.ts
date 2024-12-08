@@ -81,15 +81,20 @@ const collectedCoins: Coin[] = [];
 const inventory = document.getElementById("inventory")!; // element `inventory` is defined in index.html
 inventory.innerHTML = "No coins";
 
-function updateInventory() {
-  inventory.innerHTML = "";
-  const ul = document.createElement("ul"); // start the unordered list of NFTs
-  collectedCoins.forEach((coin: Coin) => { // coins have a cell and serial
+function createInventoryList(coins: Coin[]): HTMLUListElement {
+  const ul = document.createElement("ul");
+  coins.forEach((coin: Coin) => {
     const li = document.createElement("li");
     li.textContent = `${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
     ul.appendChild(li);
   });
-  inventory.append(ul);
+  return ul;
+}
+
+function updateInventory() {
+  inventory.innerHTML = ""; // Clear previous inventory
+  const inventoryList = createInventoryList(collectedCoins);
+  inventory.append(inventoryList);
 }
 
 // Set up collection and depositing of coins
